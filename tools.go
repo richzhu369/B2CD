@@ -39,7 +39,7 @@ func executeSSHCommand(server, command string) error {
 }
 
 // 部署应用
-func deployApp(srcPath, destPath, serverAddress, sshUser, sshKey string) error {
+func deployApp(srcPath, destPath, serverAddress string) error {
 	// 实现应用部署逻辑
 	return nil
 }
@@ -75,7 +75,7 @@ func getArgs() (packageName, appName, envName, md5Value, action, servers *string
 		os.Exit(1)
 	}
 
-	return packageName, appName, envName, md5Value, action, checkMD5
+	return packageName, appName, envName, md5Value, action, servers, checkMD5
 }
 
 func getFilenameFromURL(url string) string {

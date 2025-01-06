@@ -8,7 +8,7 @@ import (
 )
 
 // Deploy 部署应用
-func Deploy(packageName, appName, md5Value *string, checkMD5 *bool) {
+func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool) {
 	// 创建工作目录
 	dir, err := createWorkingDir("app")
 	if err != nil {
@@ -53,8 +53,8 @@ func Deploy(packageName, appName, md5Value *string, checkMD5 *bool) {
 	log.Println("应用MD5校验通过,与.md5sum文件中的值一致")
 
 	// 部署应用
-	deployPath := fmt.Sprintf("/data/app/%s/release", appName)
-	err = deployApp(extractPath, deployPath, serverAddress, sshUser, sshKey)
+	deployPath := fmt.Sprintf("/data/app/%s/release", *appName)
+	err = deployApp(workingPath, deployPath, *serverAddrs)
 	if err != nil {
 		fmt.Println("Error deploying application:", err)
 		return
