@@ -9,6 +9,11 @@ import (
 
 // Deploy 部署应用
 func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool) {
+	// 打印一些信息
+	fmt.Println("部署应用:", *appName)
+	fmt.Println("部署包名:", *packageName)
+	fmt.Println("MD5值:", *md5Value)
+	fmt.Println("服务器地址:", *serverAddrs)
 	// 创建工作目录
 	dir, err := createWorkingDir("app")
 	if err != nil {
@@ -53,20 +58,13 @@ func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool)
 	log.Println("应用MD5校验通过,与.md5sum文件中的值一致")
 
 	// 部署应用
-	deployPath := fmt.Sprintf("/data/app/%s/release", *appName)
-	err = deployApp(workingPath, deployPath, *serverAddrs)
+	appReleasePath := fmt.Sprintf("/data/app/%s/release/", *appName)
+	deployPath := appReleasePath + getAppDirName(*packageName)
+	err = deployApp(*appName, workingPath, deployPath, *serverAddrs)
 	if err != nil {
 		fmt.Println("Error deploying application:", err)
 		return
 	}
-
-	//// 更新软连接
-	//currentLink := fmt.Sprintf("/data/app/%s/current", appName)
-	//err = updateSymlink(deployPath, currentLink, serverAddress, sshUser, sshKey)
-	//if err != nil {
-	//	fmt.Println("Error updating symlink:", err)
-	//	return
-	//}
 
 	// 重启应用
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
-	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"flag"
@@ -18,29 +17,125 @@ import (
 	"time"
 )
 
-// executeSSHCommand ssh到服务器执行命令，30秒超时
+// ssh到服务器执行命令
 func executeSSHCommand(server, command string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "ssh", "-p", "10086", "root@"+server, command)
-	log.Println("Executing command: ", cmd.String())
+	cmd := exec.Command("ssh", "-p", "10086", "b2om@"+server, command)
+	log.Println("执行命令: ", cmd.String())
 	output, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("command timed out")
-	}
 	if err != nil {
-		log.Printf("Error executing command: %v", err)
-		return fmt.Errorf("failed to execute command: %s, output: %s, error: %w", command, output, err)
+		log.Printf("Error 执行命令: %v", err)
+		return fmt.Errorf("执行命令失败: %s, output: %s, error: %w", command, output, err)
 	}
 	log.Println("Command executed successfully")
 	log.Println("Command output: ", string(output))
 	return nil
 }
 
+// 拷贝文件到服务器
+func copyFileToServer(server, src, dest string) error {
+	// 临时输出当前路径，用于调试
+	dir, err2 := os.Getwd()
+	if err2 != nil {
+		log.Fatal("获取当前路径失败：", err2)
+	}
+	log.Println("当前路径：", dir)
+
+	command := fmt.Sprintf("scp -r -P 10086 %s/* b2om@%s:%s", src, server, dest)
+	cmd := exec.Command("sh", "-c", command)
+
+	log.Println("执行命令: ", cmd.String())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error 执行命令: %v", err)
+		return fmt.Errorf("执行命令失败: %s, output: %s, error: %w", cmd.String(), output, err)
+	}
+	log.Println("执行命令成功")
+	log.Println("命令: ", string(output))
+	return nil
+}
+
+// 处理并获得应用文件夹的名字
+func getAppDirName(packageName string) string {
+	reduceTail := strings.TrimSuffix(packageName, ".tar.gz")
+	parts := strings.Split(reduceTail, "_")
+	log.Println("包名：", parts)
+	log.Println(len(parts))
+	if len(parts) > 2 {
+		extractedString := strings.Join(parts[2:], "_")
+		log.Println("应用文件夹名字：", extractedString)
+		return extractedString
+	} else {
+		log.Fatal("包名格式错误")
+		return ""
+	}
+}
+
+// 检查systemd是否存在
+func checkSystemd(appName, workingPath, serverAddress string) error {
+	log.Println("检查systemd是否存在")
+	// 检查systemd是否存在
+	err := executeSSHCommand(serverAddress, "systemctl status "+appName)
+	if err != nil {
+		log.Println("systemd 不存在，创建")
+		// 创建systemd文件
+		systemdFile := fmt.Sprintf(`[Unit]`+"\n"+`Description=%s`+"\n"+`After=network-online.target remote-fs.target nss-lookup.target`+"\n"+"Wants=network-online.target"+"\n"+"\n"+`[Service]`+"\n"+`Type=simple`+"\n"+"WorkingDirectory=/data/app/%s"+"\n"+`ExecStart=/data/app/%s/current/%s`+"\n"+"KillSignal=SIGTERM"+"\n"+"SendSIGKILL=no"+"\n"+"SuccessExitStatus=0"+"\n"+"LimitNOFILE=200000"+"\n"+`Restart=always`+"\n"+"\n"+`[Install]`+"\n"+`WantedBy=multi-user.target`, appName, appName, appName, appName)
+		systemdFilePath := filepath.Join(workingPath, appName+".service")
+		err = os.WriteFile(systemdFilePath, []byte(systemdFile), 0644)
+		if err != nil {
+			log.Fatal("创建systemd文件失败：", err)
+			return err
+		}
+		// 拷贝systemd文件到远程服务器 todo 这里改成 放到当前目录一起传到服务器上后，再执行ssh远程命令 sudo cp -f /data/app/xxx/xxx.service /usr/lib/systemd/system/
+		err = executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/current/%s.service /usr/lib/systemd/system/", appName, appName))
+		if err != nil {
+			log.Fatal("拷贝systemd文件失败：", err)
+			return err
+		}
+
+		// 重载systemd
+		err = executeSSHCommand(serverAddress, "systemctl daemon-reload")
+		if err != nil {
+			log.Fatal("重载systemd失败：", err)
+			return err
+		}
+	}
+	return nil
+}
+
 // 部署应用
-func deployApp(srcPath, destPath, serverAddress string) error {
+func deployApp(appName, srcPath, destPath, serverAddress string) error {
+	log.Println("开始部署")
 	// 实现应用部署逻辑
+
+	// 1. 创建远程目录
+	err := executeSSHCommand(serverAddress, fmt.Sprintf("mkdir -p %s", destPath))
+	if err != nil {
+		log.Fatal("创建远程目录失败：", err)
+	}
+
+	// 2. 上传文件
+	err = copyFileToServer(serverAddress, srcPath, destPath)
+	if err != nil {
+		log.Fatal("上传文件失败：", err)
+	}
+
+	// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload //todo 这里可以优化，先把文件传到服务器上，再执行远程命令
+	err = checkSystemd(*appName, workingPath, *serverAddrs)
+	if err != nil {
+		fmt.Println("Error checking systemd:", err)
+		return
+	}
+
+	// 3. 更改软连接，指向新版本
+	err = executeSSHCommand(serverAddress, fmt.Sprintf("ln -sfn %s %s", destPath, "/data/app/"+appName+"/current"))
+	if err != nil {
+		log.Fatal("更改软连接失败：", err)
+	}
+
+	// 4. 检测当前有几个历史版本，如果超过5个，删除最旧的版本
+	err = executeSSHCommand(serverAddress, fmt.Sprintf("cd /data/app/%s/release && ls -t | tail -n +6 | xargs rm -rf", appName))
+	// 5. 重启应用
+
 	return nil
 }
 
