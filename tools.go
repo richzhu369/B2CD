@@ -114,7 +114,7 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 		log.Fatal("上传文件失败：", err)
 	}
 
-	// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload //todo 这里可以优化，先把文件传到服务器上，再执行远程命令
+	// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload
 	err = checkSystemd(appName, srcPath, serverAddress)
 	if err != nil {
 		fmt.Println("Error checking systemd:", err)

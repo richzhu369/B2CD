@@ -67,11 +67,17 @@ func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool)
 	}
 
 	// 重启应用
+	Restart(*appName, *serverAddrs)
 }
 
 // Restart 重启应用
-func Restart() {
-
+func Restart(appName, serverIps string) {
+	// 执行远程命令，重启应用
+	err := executeSSHCommand(serverIps, fmt.Sprintf("systemctl restart %s", appName))
+	if err != nil {
+		log.Fatal("重启应用失败：", err)
+		return
+	}
 }
 
 // Rollback 回滚应用
