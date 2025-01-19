@@ -19,7 +19,7 @@ func main() {
 	case "rollback":
 		Rollback()
 	case "restart":
-		Restart(*appName)
+		Restart(*appName, *servers)
 	default:
 		fmt.Println("选项错误，目前只支持deploy、rollback、restart")
 	}
