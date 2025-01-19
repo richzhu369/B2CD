@@ -85,19 +85,14 @@ func checkSystemd(appName, workingPath, serverAddress string) error {
 			log.Fatal("创建systemd文件失败：", err)
 			return err
 		}
-		// 拷贝systemd文件到远程服务器 todo 这里改成 放到当前目录一起传到服务器上后，再执行ssh远程命令 sudo cp -f /data/app/xxx/xxx.service /usr/lib/systemd/system/
-		err = executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/current/%s.service /usr/lib/systemd/system/", appName, appName))
+
+		// 上传systemd文件
+		err = copySystemdFileToServer(serverAddress, systemdFilePath, "/data/app/"+appName+"/current/")
 		if err != nil {
-			log.Fatal("拷贝systemd文件失败：", err)
+			log.Fatal("上传systemd文件失败：", err)
 			return err
 		}
 
-		// 重载systemd
-		err = executeSSHCommand(serverAddress, "systemctl daemon-reload")
-		if err != nil {
-			log.Fatal("重载systemd失败：", err)
-			return err
-		}
 	}
 	return nil
 }
@@ -120,10 +115,23 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 	}
 
 	// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload //todo 这里可以优化，先把文件传到服务器上，再执行远程命令
-	err = checkSystemd(*appName, workingPath, *serverAddrs)
+	err = checkSystemd(appName, srcPath, serverAddress)
 	if err != nil {
 		fmt.Println("Error checking systemd:", err)
-		return
+		return nil
+	} else {
+		// 拷贝systemd文件到/usr/lib/systemd/system/
+		err := executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/current/%s.service /usr/lib/systemd/system/", appName, appName))
+		if err != nil {
+			log.Fatal("在服务器中拷贝systemd文件失败：", err)
+			return err
+		}
+		// 重载systemd
+		err = executeSSHCommand(serverAddress, "systemctl daemon-reload")
+		if err != nil {
+			log.Fatal("重载systemd失败：", err)
+			return err
+		}
 	}
 
 	// 3. 更改软连接，指向新版本
@@ -136,6 +144,22 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 	err = executeSSHCommand(serverAddress, fmt.Sprintf("cd /data/app/%s/release && ls -t | tail -n +6 | xargs rm -rf", appName))
 	// 5. 重启应用
 
+	return nil
+}
+
+// 拷贝systemd文件到服务器
+func copySystemdFileToServer(server, src, dest string) error {
+	command := fmt.Sprintf("scp -r -P 10086 %s b2om@%s:%s", src, server, dest)
+	cmd := exec.Command("sh", "-c", command)
+
+	log.Println("执行命令: ", cmd.String())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error 执行命令: %v", err)
+		return fmt.Errorf("执行命令失败: %s, output: %s, error: %w", cmd.String(), output, err)
+	}
+	log.Println("执行命令成功")
+	log.Println("命令: ", string(output))
 	return nil
 }
 
