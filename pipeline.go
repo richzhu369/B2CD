@@ -8,7 +8,7 @@ import (
 )
 
 // Deploy 部署应用
-func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool) {
+func Deploy(packageName, appName, md5Value, serverAddrs, checkMD5 *string) {
 	// 打印一些信息
 	fmt.Println("部署应用:", *appName)
 	fmt.Println("部署包名:", *packageName)
@@ -31,7 +31,7 @@ func Deploy(packageName, appName, md5Value, serverAddrs *string, checkMD5 *bool)
 	}
 
 	// MD5校验
-	if *checkMD5 {
+	if *checkMD5 == "yes" {
 		if !verifyMD5("./", *md5Value) {
 			log.Fatal("传入的MD5和计算压缩包的MD5不一致")
 			return

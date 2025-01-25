@@ -175,13 +175,13 @@ func createWorkingDir(appName string) (string, error) {
 	return dir, nil
 }
 
-func getArgs() (packageName, appName, envName, md5Value, action, servers *string, checkMD5 *bool) {
+func getArgs() (packageName, appName, envName, md5Value, action, servers, checkMD5 *string) {
 	// Define command line flags
 	packageName = flag.String("packageName", "", "包名")
 	appName = flag.String("appName", "", "Name of the application")
 	envName = flag.String("envName", "", "Environment name")
 	md5Value = flag.String("md5Value", "", "Expected MD5 value of the application package")
-	checkMD5 = flag.Bool("checkMD5", false, "Whether to check the MD5 value of the application package")
+	checkMD5 = flag.String("checkMD5", "", "Whether to check the MD5 value of the application package")
 	action = flag.String("action", "", "Action to perform")
 	servers = flag.String("servers", "", "Comma-separated list of servers to deploy the application to") //todo 处理多个地址，转成列表方便部署的时候循环执行远程命令
 
