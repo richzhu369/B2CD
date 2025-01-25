@@ -19,7 +19,7 @@ import (
 
 // ssh到服务器执行命令
 func executeSSHCommand(server, command string) error {
-	cmd := exec.Command("ssh", "-p", "10086", "b2om@"+server, command)
+	cmd := exec.Command("ssh", "-p", "55888", "b2om@"+server, command)
 	log.Println("执行命令: ", cmd.String())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -40,7 +40,7 @@ func copyFileToServer(server, src, dest string) error {
 	}
 	log.Println("当前路径：", dir)
 
-	command := fmt.Sprintf("scp -r -P 10086 %s/* b2om@%s:%s", src, server, dest)
+	command := fmt.Sprintf("scp -r -P 55888 %s/* b2om@%s:%s", src, server, dest)
 	cmd := exec.Command("sh", "-c", command)
 
 	log.Println("执行命令: ", cmd.String())
@@ -78,7 +78,7 @@ func checkSystemd(appName, workingPath, serverAddress string) error {
 	if err != nil {
 		log.Println("systemd 不存在，创建")
 		// 创建systemd文件
-		systemdFile := fmt.Sprintf(`[Unit]`+"\n"+`Description=%s`+"\n"+`After=network-online.target remote-fs.target nss-lookup.target`+"\n"+"Wants=network-online.target"+"\n"+"\n"+`[Service]`+"\n"+`Type=simple`+"\n"+"WorkingDirectory=/data/app/%s"+"\n"+`ExecStart=/data/app/%s/current/%s`+"\n"+"KillSignal=SIGTERM"+"\n"+"SendSIGKILL=no"+"\n"+"SuccessExitStatus=0"+"\n"+"LimitNOFILE=200000"+"\n"+`Restart=always`+"\n"+"\n"+`[Install]`+"\n"+`WantedBy=multi-user.target`, appName, appName, appName, appName)
+		systemdFile := fmt.Sprintf(`[Unit]`+"\n"+`Description=%s`+"\n"+`After=network-online.target remote-fs.target nss-lookup.target`+"\n"+"Wants=network-online.target"+"\n"+"\n"+`[Service]`+"\n"+`Type=simple`+"\n"+"WorkingDirectory=/data/app/%s/current/"+"\n"+`ExecStart=/data/app/%s/current/%s`+"\n"+"KillSignal=SIGTERM"+"\n"+"SendSIGKILL=no"+"\n"+"SuccessExitStatus=0"+"\n"+"LimitNOFILE=200000"+"\n"+`Restart=always`+"\n"+"\n"+`[Install]`+"\n"+`WantedBy=multi-user.target`, appName, appName, appName, appName)
 		systemdFilePath := filepath.Join(workingPath, appName+".service")
 		err = os.WriteFile(systemdFilePath, []byte(systemdFile), 0644)
 		if err != nil {
@@ -87,7 +87,7 @@ func checkSystemd(appName, workingPath, serverAddress string) error {
 		}
 
 		// 上传systemd文件
-		err = copySystemdFileToServer(serverAddress, systemdFilePath, "/data/app/"+appName+"/current/")
+		err = copySystemdFileToServer(serverAddress, systemdFilePath, "/data/app/"+appName+"/release/")
 		if err != nil {
 			log.Fatal("上传systemd文件失败：", err)
 			return err
@@ -103,7 +103,7 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 	// 实现应用部署逻辑
 
 	// 1. 创建远程目录
-	err := executeSSHCommand(serverAddress, fmt.Sprintf("mkdir -p %s", destPath))
+	err := executeSSHCommand(serverAddress, fmt.Sprintf("mkdir -pv %s", destPath))
 	if err != nil {
 		log.Fatal("创建远程目录失败：", err)
 	}
@@ -121,13 +121,13 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 		return nil
 	} else {
 		// 拷贝systemd文件到/usr/lib/systemd/system/
-		err := executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/current/%s.service /usr/lib/systemd/system/", appName, appName))
+		err := executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s.service /usr/lib/systemd/system/", appName, appName))
 		if err != nil {
 			log.Fatal("在服务器中拷贝systemd文件失败：", err)
 			return err
 		}
 		// 重载systemd
-		err = executeSSHCommand(serverAddress, "systemctl daemon-reload")
+		err = executeSSHCommand(serverAddress, "sudo systemctl daemon-reload")
 		if err != nil {
 			log.Fatal("重载systemd失败：", err)
 			return err
@@ -149,7 +149,7 @@ func deployApp(appName, srcPath, destPath, serverAddress string) error {
 
 // 拷贝systemd文件到服务器
 func copySystemdFileToServer(server, src, dest string) error {
-	command := fmt.Sprintf("scp -r -P 10086 %s b2om@%s:%s", src, server, dest)
+	command := fmt.Sprintf("scp -r -P 55888 %s b2om@%s:%s", src, server, dest)
 	cmd := exec.Command("sh", "-c", command)
 
 	log.Println("执行命令: ", cmd.String())
