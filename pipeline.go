@@ -60,14 +60,11 @@ func Deploy(packageName, appName, md5Value, serverAddrs, checkMD5 *string) {
 	// 部署应用
 	appReleasePath := fmt.Sprintf("/data/app/%s/release/", *appName)
 	deployPath := appReleasePath + getAppDirName(*packageName)
-	err = deployApp(*appName, workingPath, deployPath, *serverAddrs)
+	err = deployToServer(*appName, workingPath, deployPath, *serverAddrs)
 	if err != nil {
 		fmt.Println("Error deploying application:", err)
 		return
 	}
-
-	// 重启应用
-	Restart(*appName, *serverAddrs)
 }
 
 // Restart 重启应用

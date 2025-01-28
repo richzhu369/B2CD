@@ -33,7 +33,6 @@ func executeSSHCommand(server, command string) error {
 
 // 拷贝文件到服务器
 func copyFileToServer(server, src, dest string) error {
-	// 临时输出当前路径，用于调试
 	dir, err2 := os.Getwd()
 	if err2 != nil {
 		log.Fatal("获取当前路径失败：", err2)
@@ -92,57 +91,67 @@ func checkSystemd(appName, workingPath, serverAddress string) error {
 			log.Fatal("上传systemd文件失败：", err)
 			return err
 		}
-
 	}
 	return nil
 }
 
 // 部署应用
-func deployApp(appName, srcPath, destPath, serverAddress string) error {
+func deployToServer(appName, srcPath, destPath, serverAddress string) error {
 	log.Println("开始部署")
-	// 实现应用部署逻辑
 
-	// 1. 创建远程目录
-	err := executeSSHCommand(serverAddress, fmt.Sprintf("mkdir -pv %s", destPath))
-	if err != nil {
-		log.Fatal("创建远程目录失败：", err)
-	}
-
-	// 2. 上传文件
-	err = copyFileToServer(serverAddress, srcPath, destPath)
-	if err != nil {
-		log.Fatal("上传文件失败：", err)
-	}
-
-	// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload
-	err = checkSystemd(appName, srcPath, serverAddress)
-	if err != nil {
-		fmt.Println("Error checking systemd:", err)
-		return nil
-	} else {
-		// 拷贝systemd文件到/usr/lib/systemd/system/
-		err := executeSSHCommand(serverAddress, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s.service /usr/lib/systemd/system/", appName, appName))
+	// 0. 拆分服务器地址，如果是多个以逗号分隔
+	ips := strings.Split(serverAddress, ",")
+	for _, ip := range ips {
+		log.Println("部署到服务器：", ip)
+		// 1. 创建远程目录
+		err := executeSSHCommand(ip, fmt.Sprintf("mkdir -pv %s", destPath))
 		if err != nil {
-			log.Fatal("在服务器中拷贝systemd文件失败：", err)
-			return err
+			log.Fatal("创建远程目录失败：", err)
 		}
-		// 重载systemd
-		err = executeSSHCommand(serverAddress, "sudo systemctl daemon-reload")
+		// 清空一次目录，防止相同包重复部署时遇到错误
+		err = executeSSHCommand(ip, fmt.Sprintf("rm -r -f %s/*", destPath))
 		if err != nil {
-			log.Fatal("重载systemd失败：", err)
-			return err
+			log.Fatal("清空远程目录失败：", err)
 		}
-	}
 
-	// 3. 更改软连接，指向新版本
-	err = executeSSHCommand(serverAddress, fmt.Sprintf("ln -sfn %s %s", destPath, "/data/app/"+appName+"/current"))
-	if err != nil {
-		log.Fatal("更改软连接失败：", err)
-	}
+		// 2. 上传文件
+		err = copyFileToServer(ip, srcPath, destPath)
+		if err != nil {
+			log.Println("上传文件失败：", err)
+			return fmt.Errorf("上传文件失败：%w", err)
+		}
 
-	// 4. 检测当前有几个历史版本，如果超过5个，删除最旧的版本
-	err = executeSSHCommand(serverAddress, fmt.Sprintf("cd /data/app/%s/release && ls -t | tail -n +6 | xargs rm -rf", appName))
-	// 5. 重启应用
+		// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload
+		err = checkSystemd(appName, srcPath, ip)
+		if err != nil {
+			fmt.Println("Error checking systemd:", err)
+			return nil
+		} else {
+			// 拷贝systemd文件到/usr/lib/systemd/system/
+			err := executeSSHCommand(ip, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s.service /usr/lib/systemd/system/", appName, appName))
+			if err != nil {
+				log.Fatal("在服务器中拷贝systemd文件失败：", err)
+				return err
+			}
+			// 重载systemd
+			err = executeSSHCommand(ip, "sudo systemctl daemon-reload")
+			if err != nil {
+				log.Fatal("重载systemd失败：", err)
+				return err
+			}
+		}
+
+		// 3. 更改软连接，指向新版本
+		err = executeSSHCommand(ip, fmt.Sprintf("ln -sfn %s %s", destPath, "/data/app/"+appName+"/current"))
+		if err != nil {
+			log.Fatal("更改软连接失败：", err)
+		}
+
+		// 4. 检测当前有几个历史版本，如果超过5个，删除最旧的版本
+		err = executeSSHCommand(ip, fmt.Sprintf("cd /data/app/%s/release && ls -t | tail -n +6 | xargs rm -rf", appName))
+		// 5. 重启应用
+		err = executeSSHCommand(ip, fmt.Sprintf("sudo systemctl restart %s", appName))
+	}
 
 	return nil
 }
