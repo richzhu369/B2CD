@@ -70,7 +70,7 @@ func getAppDirName(packageName string) string {
 }
 
 // 检查systemd是否存在
-func checkSystemd(appName, workingPath, serverAddress string) error {
+func checkSystemd(appName, workingPath, serverAddress string) (bool, error) {
 	log.Println("检查systemd是否存在")
 	// 检查systemd是否存在
 	err := executeSSHCommand(serverAddress, "systemctl status "+appName)
@@ -82,17 +82,18 @@ func checkSystemd(appName, workingPath, serverAddress string) error {
 		err = os.WriteFile(systemdFilePath, []byte(systemdFile), 0644)
 		if err != nil {
 			log.Fatal("创建systemd文件失败：", err)
-			return err
+			return false, err
 		}
 
 		// 上传systemd文件
 		err = copySystemdFileToServer(serverAddress, systemdFilePath, "/data/app/"+appName+"/release/")
 		if err != nil {
 			log.Fatal("上传systemd文件失败：", err)
-			return err
+			return false, err
 		}
 	}
-	return nil
+	log.Println("systemd 存在 跳过创建service")
+	return true, nil
 }
 
 // 部署应用
@@ -122,16 +123,18 @@ func deployToServer(appName, srcPath, destPath, serverAddress string) error {
 		}
 
 		// 检测systemd 是否存在，如果不存在就创建并执行 systemctl daemon-reload
-		err = checkSystemd(appName, srcPath, ip)
+		isExist, err := checkSystemd(appName, srcPath, ip)
 		if err != nil {
 			fmt.Println("Error checking systemd:", err)
 			return nil
 		} else {
-			// 拷贝systemd文件到/usr/lib/systemd/system/
-			err := executeSSHCommand(ip, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s.service /usr/lib/systemd/system/", appName, appName))
-			if err != nil {
-				log.Fatal("在服务器中拷贝systemd文件失败：", err)
-				return err
+			if !isExist {
+				// 拷贝systemd文件到/usr/lib/systemd/system/
+				err := executeSSHCommand(ip, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s/%s.service /usr/lib/systemd/system/", appName, destPath, appName))
+				if err != nil {
+					log.Fatal("在服务器中拷贝systemd文件失败：", err)
+					return err
+				}
 			}
 			// 重载systemd
 			err = executeSSHCommand(ip, "sudo systemctl daemon-reload")
