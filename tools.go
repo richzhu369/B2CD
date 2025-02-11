@@ -91,6 +91,8 @@ func checkSystemd(appName, workingPath, serverAddress string) (bool, error) {
 			log.Fatal("上传systemd文件失败：", err)
 			return false, err
 		}
+		// 成功 并返回false，告知上一层函数
+		return false, nil
 	}
 	log.Println("systemd 存在 跳过创建service")
 	return true, nil
@@ -130,7 +132,7 @@ func deployToServer(appName, srcPath, destPath, serverAddress string) error {
 		} else {
 			if !isExist {
 				// 拷贝systemd文件到/usr/lib/systemd/system/
-				err := executeSSHCommand(ip, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s/%s.service /usr/lib/systemd/system/", appName, destPath, appName))
+				err := executeSSHCommand(ip, fmt.Sprintf("sudo cp -f /data/app/%s/release/%s.service /usr/lib/systemd/system/", appName, appName))
 				if err != nil {
 					log.Fatal("在服务器中拷贝systemd文件失败：", err)
 					return err
